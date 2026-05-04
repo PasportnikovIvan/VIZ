@@ -1,0 +1,8 @@
+tensorflow
+scikit-learn
+opentsne
+numpy
+fastapi
+uvicorn
+python-multipart
+pillow
