@@ -4,7 +4,6 @@ import base64
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
-from sklearn.decomposition import PCA
 from openTSNE import TSNE
 import io
 from PIL import Image
@@ -17,9 +16,9 @@ def build_model():
         tf.keras.models.Model: A compiled Keras model.
     """
     inputs = tf.keras.Input(shape=(28, 28, 1))
-    x = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation="relu")(inputs)
+    x = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation="relu", name="conv2d_1")(inputs)
     x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-    x = tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu")(x)
+    x = tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu", name="conv2d_2")(x)
     x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
     x = tf.keras.layers.Flatten()(x)
     x = tf.keras.layers.Dropout(0.5)(x)
@@ -78,6 +77,28 @@ def calculate_star_coordinates(predictions):
     x = np.dot(predictions, axes_x)
     y = np.dot(predictions, axes_y)
     return np.column_stack((x, y))
+
+class PCA():
+    """Custom implementation of PCA using numpys svd"""
+    def __init__(self, n_components=2):
+        self.n_components = n_components
+        self.mean = None
+        self.components = None
+
+    def fit(self, X):
+
+        self.mean = np.mean(X, axis=0)
+        X_centered = X - self.mean
+        
+        U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+        
+        self.components = Vt[:self.n_components]
+        return self
+
+    def transform(self, X):
+        X_centered = X - self.mean
+        
+        return np.dot(X_centered, self.components.T)
 
 def main():
     """
