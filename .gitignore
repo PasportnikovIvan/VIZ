@@ -1,2 +1,4 @@
 __pycache__
 venv
+mnist_cnn.h5
+*.weights.h5
