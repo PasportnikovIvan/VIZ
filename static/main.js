@@ -27,7 +27,9 @@ let currentFeatureMaps = null;
 let currentPredictions = null;
 let fmapPages = { conv2d_1: 0, conv2d_2: 0 };
 
-// D3 Elements
+let mostContributingIdx = null;
+
+// D3 elements
 let svgScatter, gScatter, xScale, yScale, circles, tooltip;
 let svgMatrix, gMatrix;
 
@@ -39,15 +41,15 @@ async function init() {
         const response = await fetch('/data.json');
         if (!response.ok) throw new Error("Could not load data.json");
         appData = await response.json();
-        
+
         setupTooltip();
         setupScatterPlot();
         setupMatrixSVG();
         setupControls();
         setupCanvas();
-        
-        updateScatterPlot(false); 
-        updateConfusionMatrix(); 
+
+        updateScatterPlot(false);
+        updateConfusionMatrix();
     } catch (err) {
         console.error("Initialization error:", err);
     }
@@ -97,7 +99,7 @@ function setupScatterPlot() {
 
     xScale = d3.scaleLinear().range([MARGIN.left, width - MARGIN.right]);
     yScale = d3.scaleLinear().range([height - MARGIN.bottom, MARGIN.top]);
-    
+
     circles = gScatter.selectAll('circle')
         .data(appData, d => d.id)
         .enter()
@@ -107,7 +109,7 @@ function setupScatterPlot() {
         .attr('opacity', 0.85)
         .attr('stroke', 'var(--point-stroke)')
         .attr('stroke-width', 1)
-        .style('transition', 'opacity 0.3s, stroke 0.3s') 
+        .style('transition', 'opacity 0.3s, stroke 0.3s')
         .on('mouseover', handleMouseOver)
         .on('mouseout', handleMouseOut);
 }
@@ -118,21 +120,20 @@ function setupScatterPlot() {
  */
 function updateScatterPlot(transition = true) {
     const epochKey = String(EPOCHS[currentEpochIndex]);
-    
+
     const xDomain = d3.extent(appData, d => d.epochs[epochKey][currentProjection][0]);
     const yDomain = d3.extent(appData, d => d.epochs[epochKey][currentProjection][1]);
-    
+
     const xPadding = (xDomain[1] - xDomain[0]) * 0.1;
     const yPadding = (yDomain[1] - yDomain[0]) * 0.1;
-    
+
     xScale.domain([xDomain[0] - xPadding, xDomain[1] + xPadding]);
     yScale.domain([yDomain[0] - yPadding, yDomain[1] + yPadding]);
 
-    let selection = circles;
-    if (transition) {
-        selection = circles.transition().duration(1000).ease(d3.easeCubicInOut);
-    }
-    
+    let selection = transition
+        ? circles.transition().duration(1000).ease(d3.easeCubicInOut)
+        : circles;
+
     selection
         .attr('cx', d => xScale(d.epochs[epochKey][currentProjection][0]))
         .attr('cy', d => yScale(d.epochs[epochKey][currentProjection][1]));
@@ -144,19 +145,20 @@ function handleMouseOver(event, d) {
         .attr('stroke-width', 2)
         .attr('r', 8)
         .style('opacity', 1);
-        
+
     tooltip.transition().duration(200).style('opacity', 1);
-    
+
     const epochKey = String(EPOCHS[currentEpochIndex]);
     const currentPred = d.epochs[epochKey]['predicted_label'];
     const isCorrect = currentPred === d.true_label;
     const textColor = isCorrect ? 'var(--text-primary)' : '#f87171';
-    
+
     tooltip.html(`
         <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-            <img src="${d.image_b64}" width="56" height="56" style="image-rendering:pixelated; border:1px solid var(--glass-border); border-radius:4px;" />
+            <img src="${d.image_b64}" width="56" height="56"
+                style="image-rendering:pixelated; border:1px solid var(--glass-border); border-radius:4px;" />
             <div style="font-size:13px; font-weight:500;">
-                True: <span style="color:${COLORS(d.true_label)}">${d.true_label}</span> <br/>
+                True: <span style="color:${COLORS(d.true_label)}">${d.true_label}</span><br/>
                 Pred: <span style="color:${textColor}">${currentPred}</span>
             </div>
         </div>
@@ -167,15 +169,15 @@ function handleMouseOver(event, d) {
 
 function handleMouseOut(event, d) {
     const epochKey = String(EPOCHS[currentEpochIndex]);
-    const isFilteredOut = selectedMatrixCell && 
+    const isFilteredOut = selectedMatrixCell &&
         !(d.true_label === selectedMatrixCell.t && d.epochs[epochKey].predicted_label === selectedMatrixCell.p);
-    
+
     d3.select(this)
         .attr('stroke', 'var(--point-stroke)')
         .attr('stroke-width', 1)
         .attr('r', 4.5)
         .style('opacity', isFilteredOut ? 0.05 : 0.85);
-        
+
     tooltip.transition().duration(300).style('opacity', 0);
 }
 
@@ -186,13 +188,13 @@ function setupMatrixSVG() {
     const container = document.getElementById('matrix-container');
     const width = container.clientWidth;
     const height = container.clientHeight;
-    
+
     svgMatrix = d3.select('#matrix-container')
         .append('svg')
         .attr('width', '100%')
         .attr('height', '100%')
         .attr('viewBox', `0 0 ${width} ${height}`);
-        
+
     gMatrix = svgMatrix.append('g');
 }
 
@@ -204,28 +206,28 @@ function updateConfusionMatrix() {
     const container = document.getElementById('matrix-container');
     const width = container.clientWidth;
     const height = container.clientHeight;
-    
+
     const margin = { top: 30, right: 20, bottom: 30, left: 30 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
     const gridSize = Math.min(innerWidth, innerHeight) / 10;
-    
+
     gMatrix.selectAll('*').remove();
-    gMatrix.attr('transform', `translate(${(width - gridSize*10)/2 + 10}, ${(height - gridSize*10)/2 + 10})`);
-    
+    gMatrix.attr('transform',
+        `translate(${(width - gridSize * 10) / 2 + 10}, ${(height - gridSize * 10) / 2 + 10})`);
+
     const matrix = Array(10).fill(0).map(() => Array(10).fill(0));
     appData.forEach(d => {
         matrix[d.true_label][d.epochs[epochKey].predicted_label]++;
     });
-    
+
     const maxVal = d3.max(matrix.flat());
     const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, maxVal]);
-    const errorColorScale = d3.scaleSequential(d3.interpolateReds).domain([0, maxVal * 0.1]); 
-    
+    const errorColorScale = d3.scaleSequential(d3.interpolateReds).domain([0, maxVal * 0.1]);
+
     const labels = d3.range(10);
     gMatrix.selectAll(".rowLabel")
-        .data(labels)
-        .enter().append("text")
+        .data(labels).enter().append("text")
         .text(d => d)
         .attr("x", -10)
         .attr("y", (d, i) => i * gridSize + gridSize / 2)
@@ -233,21 +235,28 @@ function updateConfusionMatrix() {
         .style("alignment-baseline", "middle")
         .style("font-size", "12px")
         .style("fill", "var(--text-secondary)");
-        
+
     gMatrix.selectAll(".colLabel")
-        .data(labels)
-        .enter().append("text")
+        .data(labels).enter().append("text")
         .text(d => d)
         .attr("x", (d, i) => i * gridSize + gridSize / 2)
         .attr("y", -10)
         .style("text-anchor", "middle")
         .style("font-size", "12px")
         .style("fill", "var(--text-secondary)");
-        
-    gMatrix.append("text").text("Predicted").attr("x", gridSize*5).attr("y", -25).style("text-anchor", "middle").style("font-size", "12px").style("fill", "var(--text-primary)");
-    gMatrix.append("text").text("True").attr("transform", "rotate(-90)").attr("x", -gridSize*5).attr("y", -25).style("text-anchor", "middle").style("font-size", "12px").style("fill", "var(--text-primary)");
 
-    const strokeColor = getComputedStyle(document.documentElement).getPropertyValue('--matrix-stroke').trim() || '#000';
+    gMatrix.append("text").text("Predicted")
+        .attr("x", gridSize * 5).attr("y", -25)
+        .style("text-anchor", "middle").style("font-size", "12px")
+        .style("fill", "var(--text-primary)");
+    gMatrix.append("text").text("True")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -gridSize * 5).attr("y", -25)
+        .style("text-anchor", "middle").style("font-size", "12px")
+        .style("fill", "var(--text-primary)");
+
+    const strokeColor = getComputedStyle(document.documentElement)
+        .getPropertyValue('--matrix-stroke').trim() || '#000';
 
     for (let i = 0; i < 10; i++) {
         for (let j = 0; j < 10; j++) {
@@ -255,27 +264,27 @@ function updateConfusionMatrix() {
             const isDiagonal = i === j;
             const fill = isDiagonal ? colorScale(val) : errorColorScale(val);
             const isSelected = selectedMatrixCell && selectedMatrixCell.t === i && selectedMatrixCell.p === j;
-            
+
             const cellGroup = gMatrix.append('g')
                 .style("cursor", "pointer")
-                .on("mouseover", function() { 
-                    if(!isSelected) d3.select(this).select('rect').attr("stroke", strokeColor).attr("stroke-width", 2); 
+                .on("mouseover", function () {
+                    if (!isSelected)
+                        d3.select(this).select('rect').attr("stroke", strokeColor).attr("stroke-width", 2);
                 })
-                .on("mouseout", function() { 
-                    if(!isSelected) d3.select(this).select('rect').attr("stroke", isSelected ? "#facc15" : "none"); 
+                .on("mouseout", function () {
+                    if (!isSelected)
+                        d3.select(this).select('rect').attr("stroke", isSelected ? "#facc15" : "none");
                 })
                 .on("click", () => filterScatterPlot(i, j));
 
             cellGroup.append("rect")
-                .attr("x", j * gridSize)
-                .attr("y", i * gridSize)
-                .attr("width", gridSize - 2)
-                .attr("height", gridSize - 2)
+                .attr("x", j * gridSize).attr("y", i * gridSize)
+                .attr("width", gridSize - 2).attr("height", gridSize - 2)
                 .attr("fill", val === 0 ? "var(--glass-border)" : fill)
                 .attr("rx", 2)
                 .attr("stroke", isSelected ? "#facc15" : "none")
                 .attr("stroke-width", isSelected ? 3 : 0);
-                
+
             if (val > 0) {
                 cellGroup.append("text")
                     .attr("x", j * gridSize + gridSize / 2)
@@ -300,10 +309,10 @@ function filterScatterPlot(t, p) {
     if (selectedMatrixCell && selectedMatrixCell.t === t && selectedMatrixCell.p === p) {
         clearFilter();
     } else {
-        selectedMatrixCell = {t, p};
+        selectedMatrixCell = { t, p };
         document.getElementById('reset-filter-btn').style.display = 'block';
         applyScatterFilter();
-        updateConfusionMatrix(); 
+        updateConfusionMatrix();
     }
 }
 
@@ -323,41 +332,49 @@ function clearFilter() {
 function applyScatterFilter() {
     if (!selectedMatrixCell) return;
     const epochKey = String(EPOCHS[currentEpochIndex]);
-    const t = selectedMatrixCell.t;
-    const p = selectedMatrixCell.p;
-    
-    circles.style('opacity', d => {
-        return (d.true_label === t && d.epochs[epochKey].predicted_label === p) ? 1.0 : 0.05;
-    })
-    .style('pointer-events', d => {
-        return (d.true_label === t && d.epochs[epochKey].predicted_label === p) ? 'all' : 'none';
-    });
-    
-    circles.filter(d => d.true_label === t && d.epochs[epochKey].predicted_label === p).raise();
+    const { t, p } = selectedMatrixCell;
+
+    circles
+        .style('opacity', d =>
+            (d.true_label === t && d.epochs[epochKey].predicted_label === p) ? 1.0 : 0.05)
+        .style('pointer-events', d =>
+            (d.true_label === t && d.epochs[epochKey].predicted_label === p) ? 'all' : 'none');
+
+    circles
+        .filter(d => d.true_label === t && d.epochs[epochKey].predicted_label === p)
+        .raise();
 }
 
-// === LOCAL VIEW (CANVAS & INFERENCE) ===
+// === CANVAS ===
+
 let isDrawing = false;
 let ctx;
+let canvasHasContent = false;
 
 function setupCanvas() {
     const canvas = document.getElementById('drawing-canvas');
+    if (!canvas) return;
+
     ctx = canvas.getContext('2d');
-    
-    // Fill black
+
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    
+
     const getPos = (e) => {
         const rect = canvas.getBoundingClientRect();
+        const pixelW = parseInt(canvas.getAttribute('width'),  10);
+        const pixelH = parseInt(canvas.getAttribute('height'), 10);
+
+        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
         return {
-            x: (e.clientX || e.touches[0].clientX) - rect.left,
-            y: (e.clientY || e.touches[0].clientY) - rect.top
+            x: (clientX - rect.left) * (pixelW / rect.width),
+            y: (clientY - rect.top)  * (pixelH / rect.height)
         };
     };
 
@@ -367,14 +384,17 @@ function setupCanvas() {
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y);
         e.preventDefault();
+        e.stopPropagation();
     };
 
     const draw = (e) => {
         if (!isDrawing) return;
+        canvasHasContent = true;
         const pos = getPos(e);
         ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
         e.preventDefault();
+        e.stopPropagation();
     };
 
     const stopDraw = () => {
@@ -384,24 +404,32 @@ function setupCanvas() {
         }
     };
 
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDraw);
-    canvas.addEventListener('mouseout', stopDraw);
-    
-    // Touch support
-    canvas.addEventListener('touchstart', startDraw);
-    canvas.addEventListener('touchmove', draw);
-    canvas.addEventListener('touchend', stopDraw);
-    
+    canvas.addEventListener('mousedown',  startDraw, { passive: false });
+    canvas.addEventListener('mousemove',  draw,      { passive: false });
+    window.addEventListener('mouseup',    stopDraw);
+    canvas.addEventListener('mouseout',   stopDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove',  draw,      { passive: false });
+    canvas.addEventListener('touchend',   stopDraw);
+
     document.getElementById('clear-btn').addEventListener('click', () => {
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        canvasHasContent = false;
+
+        fmapPages = { conv2d_1: 0, conv2d_2: 0 };
+
         document.getElementById('bar-chart-container').innerHTML = '';
         document.getElementById('feature-maps-container').innerHTML = '';
+
+        const camContainer = document.getElementById('gradcam-container');
+        camContainer.style.display = 'none';
     });
-    
-    document.getElementById('submit-btn').addEventListener('click', performInference);
+
+    document.getElementById('submit-btn').addEventListener('click', () => {
+        if (!canvasHasContent) return;
+        performInference();
+    });
 }
 
 /**
@@ -409,28 +437,36 @@ function setupCanvas() {
  */
 async function performInference() {
     const canvas = document.getElementById('drawing-canvas');
+    if (!canvas) return;
     const dataURL = canvas.toDataURL('image/png');
     
     try {
-        const response = await fetch('/predict', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: dataURL })
-        });
+        // Run both backend requests concurrently to keep things snappy
+        const [predRes, camRes] = await Promise.all([
+            fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataURL })
+            }).then(r => r.json()),
+            
+            fetch('/gradcam', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataURL })
+            }).then(r => r.json())
+        ]);
+
+        currentFeatureMaps = predRes.feature_maps;
+        currentPredictions = predRes.predictions;
         
-        if (!response.ok) throw new Error("Inference failed");
-        
-        const result = await response.json();
-        console.log('Layer 1 maps:', result.feature_maps.conv2d_1.length, '| Layer 2 maps:', result.feature_maps.conv2d_2.length);
-        
-        currentFeatureMaps = result.feature_maps;
-        currentPredictions = result.predictions;
-        fmapPages = { conv2d_1: 0, conv2d_2: 0 };
-        
-        renderBarChart(result.predictions);
+        mostContributingIdx = camRes.mostContributingIdx;
+
+        renderBarChart(predRes.predictions);
         renderFeatureMaps();
+        renderGradCAM(camRes, dataURL);
+        
     } catch (err) {
-        console.error("Error during inference:", err);
+        console.error("Error during live inference execution pipeline:", err);
     }
 }
 
@@ -441,174 +477,268 @@ async function performInference() {
 function renderBarChart(predictions) {
     const container = document.getElementById('bar-chart-container');
     container.innerHTML = '';
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    
+    const width  = container.clientWidth  || 260;
+    const height = container.clientHeight || 160;
+
     const svgBar = d3.select(container).append('svg')
-        .attr('width', '100%')
-        .attr('height', '100%')
+        .attr('width', '100%').attr('height', '100%')
         .attr('viewBox', `0 0 ${width} ${height}`);
-        
-    const margin = {top: 10, right: 10, bottom: 25, left: 30};
-    const innerW = width - margin.left - margin.right;
-    const innerH = height - margin.top - margin.bottom;
-    
+
+    const margin = { top: 10, right: 10, bottom: 25, left: 30 };
+    const innerW = width  - margin.left - margin.right;
+    const innerH = height - margin.top  - margin.bottom;
+
     const g = svgBar.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-    
+
     const x = d3.scaleBand().range([0, innerW]).domain(d3.range(10)).padding(0.2);
     const y = d3.scaleLinear().range([innerH, 0]).domain([0, 1]);
-    
+
+    g.append('g').attr('transform', `translate(0, ${innerH})`)
+        .call(d3.axisBottom(x).tickSizeOuter(0))
+        .style("font-family", "Outfit")
+        .style("color", "var(--text-secondary)");
+
     g.append('g')
-       .attr('transform', `translate(0, ${innerH})`)
-       .call(d3.axisBottom(x).tickSizeOuter(0))
-       .style("font-family", "Outfit")
-       .style("color", "var(--text-secondary)");
-       
-    g.append('g')
-       .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".0%")))
-       .style("font-family", "Outfit")
-       .style("color", "var(--text-secondary)");
-       
+        .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".0%")))
+        .style("font-family", "Outfit")
+        .style("color", "var(--text-secondary)");
+
     g.selectAll('rect')
-       .data(predictions)
-       .enter()
-       .append('rect')
-       .attr('x', (d, i) => x(i))
-       .attr('y', d => y(d))
-       .attr('width', x.bandwidth())
-       .attr('height', d => innerH - y(d))
-       .attr('fill', (d, i) => COLORS(i))
-       .attr('rx', 2);
+        .data(predictions).enter().append('rect')
+        .attr('x', (d, i) => x(i))
+        .attr('y', d => y(d))
+        .attr('width', x.bandwidth())
+        .attr('height', d => innerH - y(d))
+        .attr('fill', (d, i) => COLORS(i))
+        .attr('rx', 2);
 }
 
 function renderFeatureMaps() {
     if (!currentFeatureMaps) return;
     const container = document.getElementById('feature-maps-container');
     container.innerHTML = '';
-    
-    const createSection = (title, maps, layerKey) => {
-        const div = document.createElement('div');
-        div.style.marginBottom = '12px';
-        div.style.width = '100%';
-        
-        const ITEMS_PER_PAGE = window.innerWidth <= 1200 ? 8 : 16;
-        const totalPages = Math.ceil(maps.length / ITEMS_PER_PAGE);
-        const currentPage = fmapPages[layerKey];
-        const startIdx = currentPage * ITEMS_PER_PAGE;
-        const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, maps.length);
-        
+
+    // Layer 1: 32 filters at 26×26 — show all at once in a tighter grid
+    // Layer 2: 64 filters at 11×11 — paginate at 32 per page (4 rows of 8)
+    const configs = [
+        { title: 'Conv2D layer 1',  key: 'conv2d_1', perPage: 32, cols: 8 },
+        { title: 'Conv2D layer 2',  key: 'conv2d_2', perPage: 32, cols: 8 },
+    ];
+
+    configs.forEach(({ title, key, perPage, cols }) => {
+        const maps = currentFeatureMaps[key];
+        const totalPages = Math.ceil(maps.length / perPage);
+        const page = fmapPages[key];
+        const start = page * perPage;
+        const end   = Math.min(start + perPage, maps.length);
+        const slice = maps.slice(start, end);
+
+        // Section wrapper
+        const section = document.createElement('div');
+        section.style.cssText = 'margin-bottom:20px;';
+
+        // Header row: title left, pagination right
         const header = document.createElement('div');
-        header.style.display = 'flex';
-        header.style.justifyContent = 'space-between';
-        header.style.alignItems = 'center';
-        header.style.borderBottom = '1px solid var(--panel-inset-border)';
-        header.style.paddingBottom = '4px';
-        header.style.marginBottom = '8px';
-        
-        const btnStyle = 'cursor:pointer; background:none; border:none; color:var(--accent); font-weight:600; padding: 2px 6px; font-family: inherit; font-size: 0.8rem;';
-        const prevDisabled = currentPage === 0 ? 'disabled style="opacity:0.4; cursor:default;"' : '';
-        const nextDisabled = currentPage >= totalPages - 1 ? 'disabled style="opacity:0.4; cursor:default;"' : '';
-        
-        header.innerHTML = `
-            <h4 style="font-size:0.8rem; color:var(--text-secondary); letter-spacing:0.5px; margin:0;">${title}</h4>
-            <div style="font-size:0.75rem; color:var(--text-secondary); display:flex; gap:6px; align-items:center;">
-                <button class="page-btn" data-dir="-1" style="${btnStyle}" ${prevDisabled}>&lt; Prev</button>
-                <span>Showing ${startIdx + 1}-${endIdx} of ${maps.length}</span>
-                <button class="page-btn" data-dir="1" style="${btnStyle}" ${nextDisabled}>Next &gt;</button>
-            </div>
+        header.style.cssText = [
+            'display:flex',
+            'justify-content:space-between',
+            'align-items:center',
+            'margin-bottom:10px',
+            'padding-bottom:6px',
+            'border-bottom:1px solid var(--panel-inset-border)',
+        ].join(';');
+
+        // Layer badge + count
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        titleEl.innerHTML = `
+            <span style="
+                font-size:0.72rem;font-weight:600;letter-spacing:0.6px;
+                color:var(--accent);text-transform:uppercase;">
+                ${title}
+            </span>
+            <span style="
+                font-size:0.68rem;color:var(--text-secondary);
+                background:var(--panel-inset-bg);border:1px solid var(--panel-inset-border);
+                border-radius:4px;padding:1px 6px;">
+                ${maps.length} filters
+            </span>
         `;
-        
-        const btns = header.querySelectorAll('.page-btn');
-        btns.forEach(btn => {
-            if (!btn.disabled) {
-                btn.addEventListener('click', (e) => {
-                    const dir = parseInt(e.target.dataset.dir);
-                    fmapPages[layerKey] += dir;
-                    renderFeatureMaps();
-                });
-            }
-        });
-        
-        div.appendChild(header);
-        
+
+        // Pagination controls (only if more than one page)
+        const pageCtrl = document.createElement('div');
+        pageCtrl.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text-secondary);';
+
+        if (totalPages > 1) {
+            const mkBtn = (label, dir, disabled) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.disabled = disabled;
+                b.style.cssText = [
+                    'background:var(--panel-inset-bg)',
+                    'border:1px solid var(--panel-inset-border)',
+                    'border-radius:4px',
+                    'color:' + (disabled ? 'var(--text-secondary)' : 'var(--accent)'),
+                    'cursor:' + (disabled ? 'default' : 'pointer'),
+                    'font-family:inherit',
+                    'font-size:0.72rem',
+                    'opacity:' + (disabled ? '0.4' : '1'),
+                    'padding:2px 8px',
+                ].join(';');
+                if (!disabled) {
+                    b.addEventListener('click', () => {
+                        fmapPages[key] += dir;
+                        renderFeatureMaps();
+                    });
+                }
+                return b;
+            };
+
+            pageCtrl.appendChild(mkBtn('‹', -1, page === 0));
+            const pageLabel = document.createElement('span');
+            pageLabel.textContent = `${page + 1} / ${totalPages}`;
+            pageCtrl.appendChild(pageLabel);
+            pageCtrl.appendChild(mkBtn('›', 1, page >= totalPages - 1));
+        } else {
+            // Single page — just show the range
+            const rangeLabel = document.createElement('span');
+            rangeLabel.textContent = `${start + 1}–${end}`;
+            pageCtrl.appendChild(rangeLabel);
+        }
+
+        header.appendChild(titleEl);
+        header.appendChild(pageCtrl);
+        section.appendChild(header);
+
+        // Grid — fixed column count so thumbnails are a consistent size
         const grid = document.createElement('div');
-        grid.style.display = 'grid';
-        grid.style.gridTemplateColumns = 'repeat(auto-fill, 80px)';
-        grid.style.gap = '8px';
-        grid.style.width = '100%';
-        
-        const currentMaps = maps.slice(startIdx, endIdx);
-        currentMaps.forEach(b64 => {
+        grid.style.cssText = [
+            `display:grid`,
+            `grid-template-columns:repeat(${cols}, 1fr)`,
+            `gap:6px`,
+            `width:100%`,
+        ].join(';');
+
+        slice.forEach((b64, idx) => {
+            const cell = document.createElement('div');
+            cell.style.cssText = [
+                'position:relative',
+                'aspect-ratio:1',
+                'background:var(--panel-inset-bg)',
+                'border:1px solid var(--panel-inset-border)',
+                'border-radius:5px',
+                'overflow:hidden',
+                'transition:border-color 0.15s',
+            ].join(';');
+
+            cell.addEventListener('mouseenter', () => {
+                cell.style.borderColor = 'var(--accent)';
+                cell.style.zIndex = '2';
+                numLabel.style.opacity = '1';
+            });
+            cell.addEventListener('mouseleave', () => {
+                cell.style.borderColor = 'var(--panel-inset-border)';
+                cell.style.zIndex = '0';
+                numLabel.style.opacity = '0';
+            });
+
             const img = document.createElement('img');
             img.src = b64;
-            img.className = 'fmap-img';
-            img.style.width = '80px';
-            img.style.height = '80px';
-            grid.appendChild(img);
+            img.style.cssText = [
+                'display:block',
+                'width:100%',
+                'height:100%',
+                'object-fit:cover',
+                'image-rendering:pixelated',
+            ].join(';');
+
+            // Filter index label — fades in on hover
+            const numLabel = document.createElement('span');
+            numLabel.textContent = start + idx;
+            numLabel.style.cssText = [
+                'position:absolute',
+                'bottom:2px',
+                'right:3px',
+                'font-size:9px',
+                'font-family:monospace',
+                'color:rgba(255,255,255,0.9)',
+                'text-shadow:0 0 3px rgba(0,0,0,0.8)',
+                'opacity:0',
+                'transition:opacity 0.15s',
+                'pointer-events:none',
+            ].join(';');
+
+            cell.appendChild(img);
+            cell.appendChild(numLabel);
+            grid.appendChild(cell);
         });
-        
-        div.appendChild(grid);
-        container.appendChild(div);
-    };
-    
-    createSection('Conv2D Layer 1', currentFeatureMaps.conv2d_1, 'conv2d_1');
-    createSection('Conv2D Layer 2', currentFeatureMaps.conv2d_2, 'conv2d_2');
+
+        section.appendChild(grid);
+        container.appendChild(section);
+    });
+}
+
+function renderGradCAM(cam, inputImage) {
+    const container = document.getElementById('gradcam-container');
+    container.style.display = 'block';
+
+    document.getElementById('gradcam-input').src   = inputImage;
+    document.getElementById('gradcam-heatmap').src = cam.heatmap;
+    document.getElementById('gradcam-label').textContent =
+        `Class ${cam.class_index} · predicted: ${cam.predicted_label}`;
 }
 
 // === CONTROLS ===
+
 function setupControls() {
-    const epochSlider = document.getElementById('epoch-slider');
-    const epochDisplay = document.getElementById('epoch-display');
-    const projectionSelect = document.getElementById('projection-select');
-    const themeToggleBtn = document.getElementById('theme-toggle');
+    const epochSlider   = document.getElementById('epoch-slider');
+    const epochDisplay  = document.getElementById('epoch-display');
+    const projSelect    = document.getElementById('projection-select');
+    const themeBtn      = document.getElementById('theme-toggle');
     const resetFilterBtn = document.getElementById('reset-filter-btn');
 
     epochSlider.addEventListener('input', (e) => {
         currentEpochIndex = parseInt(e.target.value);
         epochDisplay.textContent = EPOCHS[currentEpochIndex];
         updateScatterPlot(true);
-        updateConfusionMatrix(); 
-        if (selectedMatrixCell) applyScatterFilter(); 
+        updateConfusionMatrix();
+        if (selectedMatrixCell) applyScatterFilter();
     });
 
-    projectionSelect.addEventListener('change', (e) => {
+    projSelect.addEventListener('change', (e) => {
         currentProjection = e.target.value;
         updateScatterPlot(true);
     });
 
-    themeToggleBtn.addEventListener('click', () => {
+    themeBtn.addEventListener('click', () => {
         isDarkMode = !isDarkMode;
         document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-        themeToggleBtn.textContent = isDarkMode ? '☀️' : '🌙';
-        
+        themeBtn.textContent = isDarkMode ? '☀️' : '🌙';
         updateConfusionMatrix();
     });
 
     resetFilterBtn.addEventListener('click', clearFilter);
 }
 
+// === Resize ===
+
 window.addEventListener('resize', () => {
-    const scatterContainer = document.getElementById('scatter-container');
+    const sc = document.getElementById('scatter-container');
     if (svgScatter) {
-        svgScatter.attr('viewBox', `0 0 ${scatterContainer.clientWidth} ${scatterContainer.clientHeight}`);
-        xScale.range([MARGIN.left, scatterContainer.clientWidth - MARGIN.right]);
-        yScale.range([scatterContainer.clientHeight - MARGIN.bottom, MARGIN.top]);
+        svgScatter.attr('viewBox', `0 0 ${sc.clientWidth} ${sc.clientHeight}`);
+        xScale.range([MARGIN.left, sc.clientWidth  - MARGIN.right]);
+        yScale.range([sc.clientHeight - MARGIN.bottom, MARGIN.top]);
         updateScatterPlot(false);
     }
-    
-    const matrixContainer = document.getElementById('matrix-container');
+
+    const mc = document.getElementById('matrix-container');
     if (svgMatrix) {
-        svgMatrix.attr('viewBox', `0 0 ${matrixContainer.clientWidth} ${matrixContainer.clientHeight}`);
+        svgMatrix.attr('viewBox', `0 0 ${mc.clientWidth} ${mc.clientHeight}`);
         updateConfusionMatrix();
     }
-    
-    if (currentPredictions) {
-        renderBarChart(currentPredictions);
-    }
-    
-    if (currentFeatureMaps) {
-        renderFeatureMaps();
-    }
+
+    if (currentPredictions)  renderBarChart(currentPredictions);
+    if (currentFeatureMaps)  renderFeatureMaps();
 });
 
 document.addEventListener('DOMContentLoaded', init);
