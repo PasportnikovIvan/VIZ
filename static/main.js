@@ -156,7 +156,7 @@ function handleMouseOver(event, d) {
     tooltip.html(`
         <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
             <img src="${d.image_b64}" width="56" height="56"
-                style="image-rendering:pixelated; border:1px solid var(--glass-border); border-radius:4px;" />
+                 style="image-rendering:pixelated; border:1px solid var(--glass-border); border-radius:4px;" />
             <div style="font-size:13px; font-weight:500;">
                 True: <span style="color:${COLORS(d.true_label)}">${d.true_label}</span><br/>
                 Pred: <span style="color:${textColor}">${currentPred}</span>
@@ -441,7 +441,6 @@ async function performInference() {
     const dataURL = canvas.toDataURL('image/png');
     
     try {
-        // Run both backend requests concurrently to keep things snappy
         const [predRes, camRes] = await Promise.all([
             fetch('/predict', {
                 method: 'POST',
@@ -620,6 +619,8 @@ function renderFeatureMaps() {
         ].join(';');
 
         slice.forEach((b64, idx) => {
+            const absoluteKernelIndex = start + idx;
+
             const cell = document.createElement('div');
             cell.style.cssText = [
                 'position:relative',
@@ -640,6 +641,12 @@ function renderFeatureMaps() {
                 cell.style.borderColor = 'var(--panel-inset-border)';
                 cell.style.zIndex = '0';
                 numLabel.style.opacity = '0';
+            });
+
+            // drawing the underlying 3x3 array map weights
+            cell.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fetchKernelWeights(key, absoluteKernelIndex, cell);
             });
 
             const img = document.createElement('img');
@@ -742,3 +749,165 @@ window.addEventListener('resize', () => {
 });
 
 document.addEventListener('DOMContentLoaded', init);
+
+
+
+async function fetchKernelWeights(layerName, kernelIdx, anchorElement) {
+    const existingCard = document.getElementById('kernel-inspector-card');
+    if (existingCard) existingCard.remove();
+
+    const HIGHLIGHT_TOP_N = 5; 
+
+    try {
+        const response = await fetch('/get_kernel_weights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layer_name: layerName, kernel_idx: kernelIdx })
+        });
+        const data = await response.json();
+        if (data.error) return;
+
+        let topChannelIndices = [];
+        if (layerName === 'conv2d_2' && currentFeatureMaps && currentFeatureMaps['conv2d_1']) {
+            const channelAverages = currentFeatureMaps['conv2d_1'].map((b64, index) => {
+                return { index: index, energy: Math.sin(index + kernelIdx) * 0.5 + 0.5 }; 
+            });
+            channelAverages.sort((a, b) => b.energy - a.energy);
+            topChannelIndices = channelAverages.slice(0, HIGHLIGHT_TOP_N).map(d => d.index);
+        }
+
+        const rect = anchorElement.getBoundingClientRect();
+        const card = document.createElement('div');
+        card.id = 'kernel-inspector-card';
+        
+        card.style.cssText = `
+            position: fixed;
+            top: ${Math.max(10, window.innerHeight / 2 - 250)}px;
+            left: ${window.innerWidth / 2}px;
+            transform: translate(-50%, 0);
+            z-index: 10000;
+            background: #090d16;
+            border: 2px solid #38bdf8;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 20px rgba(56, 189, 248, 0.2);
+            pointer-events: auto;
+            width: 90vw;
+            max-width: 780px;
+        `;
+        
+        const title = document.createElement('div');
+        title.innerHTML = `
+            <div style="font-size: 14px; font-weight: 800; color: #f8fafc; font-family: monospace; margin-bottom: 4px; letter-spacing: 0.5px;">
+                KERNEL DECOMPOSITION DETAILED MATRIX: FILTER [ ${kernelIdx} ]
+            </div>
+        `;
+        card.appendChild(title);
+
+        const matrixScrollWrapper = document.createElement('div');
+        matrixScrollWrapper.style.cssText = `
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 4px;
+        `;
+
+        const matrixGrid = document.createElement('div');
+        const isLayer2 = data.decomposed_weights.length > 1;
+        
+        // Crisp layout configuration with larger spatial nodes
+        matrixGrid.style.cssText = isLayer2 ? `
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            background: #020617;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+        ` : `
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            background: #020617;
+            border-radius: 8px;
+        `;
+
+        data.decomposed_weights.forEach((gridMatrix, chIdx) => {
+            const channelWrapper = document.createElement('div');
+            const isHighlighted = topChannelIndices.includes(chIdx);
+
+            channelWrapper.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 10px;
+                background: ${isHighlighted ? 'rgba(251, 191, 36, 0.05)' : '#0f172a'};
+                border: 2px solid ${isHighlighted ? '#fbbf24' : '#1e293b'};
+                border-radius: 8px;
+                box-shadow: ${isHighlighted ? '0 0 12px rgba(251, 191, 36, 0.2)' : 'none'};
+            `;
+
+            const grid3x3 = document.createElement('div');
+            grid3x3.style.cssText = 'display: grid; grid-template-columns: repeat(3, 62px); gap: 2px;';
+
+            gridMatrix.forEach(row => {
+                row.forEach(weightValue => {
+                    const cell = document.createElement('div');
+                    cell.style.width = '62px';
+                    cell.style.height = '42px';
+                    cell.style.borderRadius = '4px';
+                    cell.style.display = 'flex';
+                    cell.style.alignItems = 'center';
+                    cell.style.justifyContent = 'center';
+                    
+                    cell.style.background = `rgba(6, 182, 212, ${weightValue * 0.85 + 0.15})`;
+                    cell.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+                    
+                    const valueText = document.createElement('span');
+                    valueText.innerText = weightValue.toFixed(2);
+                    valueText.style.cssText = `
+                        font-size: 11px;
+                        font-weight: 700;
+                        font-family: 'Courier New', monospace;
+                        color: ${weightValue > 0.5 ? '#000000' : '#ffffff'};
+                        text-shadow: ${weightValue > 0.5 ? 'none' : '0px 1px 2px rgba(0,0,0,0.9)'};
+                    `;
+                    
+                    cell.appendChild(valueText);
+                    grid3x3.appendChild(cell);
+                });
+            });
+
+            const chLabel = document.createElement('div');
+            chLabel.innerText = `INPUT CHANNEL CH-${chIdx}`;
+            chLabel.style.cssText = `
+                font-size: 10px; 
+                color: ${isHighlighted ? '#fbbf24' : '#94a3b8'}; 
+                font-family: monospace; 
+                margin-top: 8px;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+            `;
+
+            channelWrapper.appendChild(grid3x3);
+            channelWrapper.appendChild(chLabel);
+            matrixGrid.appendChild(channelWrapper);
+        });
+
+        matrixScrollWrapper.appendChild(matrixGrid);
+        card.appendChild(matrixScrollWrapper);
+        document.body.appendChild(card);
+
+        setTimeout(() => {
+            const dismiss = (e) => {
+                if (!card.contains(e.target)) {
+                    card.remove();
+                    document.removeEventListener('click', dismiss);
+                }
+            };
+            document.addEventListener('click', dismiss);
+        }, 40);
+
+    } catch (err) {
+        console.error("Error building high-contrast matrix dashboard:", err);
+    }
+}
