@@ -323,3 +323,166 @@ h3 {
     font-size: 13px;
     pointer-events: none;
 }
+
+/* Media Queries */
+
+@media (max-width: 1024px) {
+    body {
+        height: auto;
+        overflow-y: auto; /* Allow layout scrolling on smaller viewports */
+        overflow-x: hidden;
+        padding: 0.8rem;
+        gap: 0.8rem;
+    }
+
+    /* Collapse header grid into a single column flow */
+    .global-header-strip {
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+    }
+
+    .header-title-box {
+        padding: 0.6rem 1rem !important;
+    }
+
+    .header-toolbar-box {
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        padding: 0.8rem 1rem !important;
+    }
+
+    /* Transform 3-column workspace into a single multi-row container */
+    .app-container {
+        grid-template-columns: 1fr;
+        height: auto;
+        gap: 0.8rem;
+    }
+
+    .left-column, .middle-column, .right-column-stack {
+        height: auto;
+        min-height: initial;
+    }
+
+    /* Force interactive D3 containers to have a visible height on mobile */
+    .vis-container {
+        height: 320px;
+        min-height: 300px;
+    }
+
+    .flow-view {
+        height: auto;
+        padding: 0.8rem;
+    }
+
+    .flow-scroll-area {
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    /* Re-arrange instrument sandbox controls for tablet/mobile balance */
+    .interactive-instrument-card {
+        height: auto;
+        overflow-y: visible;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+    }
+
+    @media (min-width: 600px) {
+        .interactive-instrument-card {
+            grid-template-columns: 1fr 1fr;
+        }
+        .sandbox-block:nth-child(1) { grid-column: 1; }
+        .sandbox-block:nth-child(2) { grid-column: 2; }
+    }
+
+    .flex-grow-chart {
+        height: 180px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 0.5rem;
+        gap: 0.5rem;
+    }
+
+    h1 {
+        font-size: 1rem;
+    }
+
+    .header-toolbar-box {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-item {
+        width: 100%;
+    }
+
+    .vis-container {
+        height: 260px;
+    }
+    
+    .gradcam-overlay-wrap, #drawing-canvas {
+        max-width: 120px;
+    }
+}
+
+/* Kernel Decomposition Inspector Modal Layout */
+
+#kernel-inspector-card {
+    position: fixed;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 10000;
+    background: #090d16;
+    border: 2px solid #38bdf8;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 20px rgba(56, 189, 248, 0.2);
+    width: 90vw;
+    max-width: 780px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.matrix-scroll-wrapper {
+    max-height: 70vh; /* Scaled relative to the device viewport height */
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Responsive grid configuration for decomposed feature map weights */
+.matrix-grid-layout {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* 3 columns on standard monitors */
+    gap: 12px;
+    background: #020617;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+}
+
+.matrix-flex-layout {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+    background: #020617;
+    border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+    .matrix-grid-layout {
+        grid-template-columns: repeat(2, 1fr); /* Drop to 2 columns on tablets */
+    }
+}
+
+@media (max-width: 520px) {
+    .matrix-grid-layout {
+        grid-template-columns: 1fr; /* Singular column stack on mobile screens */
+        justify-items: center;
+    }
+}

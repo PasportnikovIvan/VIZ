@@ -776,25 +776,9 @@ async function fetchKernelWeights(layerName, kernelIdx, anchorElement) {
             topChannelIndices = channelAverages.slice(0, HIGHLIGHT_TOP_N).map(d => d.index);
         }
 
-        const rect = anchorElement.getBoundingClientRect();
         const card = document.createElement('div');
         card.id = 'kernel-inspector-card';
-        
-        card.style.cssText = `
-            position: fixed;
-            top: ${Math.max(10, window.innerHeight / 2 - 250)}px;
-            left: ${window.innerWidth / 2}px;
-            transform: translate(-50%, 0);
-            z-index: 10000;
-            background: #090d16;
-            border: 2px solid #38bdf8;
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 20px rgba(56, 189, 248, 0.2);
-            pointer-events: auto;
-            width: 90vw;
-            max-width: 780px;
-        `;
+        card.style.pointerEvents = 'auto'; // Keep pointer-events active, positioning is handled by CSS classes
         
         const title = document.createElement('div');
         title.innerHTML = `
@@ -805,31 +789,17 @@ async function fetchKernelWeights(layerName, kernelIdx, anchorElement) {
         card.appendChild(title);
 
         const matrixScrollWrapper = document.createElement('div');
-        matrixScrollWrapper.style.cssText = `
-            max-height: 420px;
-            overflow-y: auto;
-            padding-right: 4px;
-        `;
+        matrixScrollWrapper.className = 'matrix-scroll-wrapper';
 
         const matrixGrid = document.createElement('div');
         const isLayer2 = data.decomposed_weights.length > 1;
         
-        // Crisp layout configuration with larger spatial nodes
-        matrixGrid.style.cssText = isLayer2 ? `
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            background: #020617;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #1e293b;
-        ` : `
-            display: flex;
-            justify-content: center;
-            padding: 10px;
-            background: #020617;
-            border-radius: 8px;
-        `;
+        /* Apply dynamic fluid classes managed via responsive CSS stylesheets */
+        if (isLayer2) {
+            matrixGrid.className = 'matrix-grid-layout';
+        } else {
+            matrixGrid.className = 'matrix-flex-layout';
+        }
 
         data.decomposed_weights.forEach((gridMatrix, chIdx) => {
             const channelWrapper = document.createElement('div');
